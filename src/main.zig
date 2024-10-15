@@ -1,24 +1,32 @@
 const std = @import("std");
 
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    var args = std.process.args();
+    _ = args.skip();
+    const part_str = args.next() orelse return error.PartNotProvided;
+    const part = try std.fmt.parseInt(u8, part_str, 10);
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    const is_test = if (args.next()) |is_test_str| std.mem.eql(u8, is_test_str, "test") else false;
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
+    const input = if (is_test) try getInput("test_input.txt") else try getInput("input.txt");
 
-    try bw.flush(); // don't forget to flush!
+    switch (part) {
+        1 => part1(input),
+        2 => part2(input),
+        else => return error.IncorrectPart,
+    }
 }
 
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+fn getInput(path: []const u8) ![]u8 {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const ally = gpa.allocator();
+    return std.fs.cwd().readFileAlloc(ally, path, std.math.maxInt(usize));
+}
+
+fn part1(input: []const u8) void {
+    std.debug.print("part 1, input: {s}\n", .{input});
+}
+
+fn part2(input: []const u8) void {
+    std.debug.print("part 2, input: {s}\n", .{input});
 }
