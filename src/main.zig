@@ -1,79 +1,86 @@
 const std = @import("std");
-const Parser = @import("parser.zig").Parser;
+const mem = std.mem;
 
 pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const ally = gpa.allocator();
+    defer std.debug.assert(gpa.deinit() == .ok);
+
     var args = std.process.args();
+
     _ = args.skip();
 
     const is_test = if (args.next()) |is_test_str| std.mem.eql(u8, is_test_str, "test") else false;
 
-    const input = if (is_test) try getInput("test_input.txt") else try getInput("input.txt");
+    const input = if (is_test) try getInput("test_input.txt", ally) else try getInput("input.txt", ally);
+    defer ally.free(input);
 
-    const answer = try solve(input);
+    const answer = try solve(input, ally);
     const writer = std.io.getStdOut().writer();
     try writer.print("answer: {any}\n", .{answer});
 }
 
-fn getInput(path: []const u8) ![]u8 {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const ally = gpa.allocator();
+fn getInput(path: []const u8, ally: mem.Allocator) ![]u8 {
     return std.fs.cwd().readFileAlloc(ally, path, std.math.maxInt(usize));
 }
 
-fn solve(input: []const u8) !u64 {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const ally = gpa.allocator();
+fn solve(input: []const u8, ally: mem.Allocator) !u64 {
+    var forrest = try Forrest.parse(input, ally);
+    defer forrest.deinit(ally);
 
-    var lines = std.mem.splitScalar(u8, input, '\n');
-
-    var entries = std.ArrayList(Entry).init(ally);
-    defer entries.deinit();
-
-    while (lines.next()) |line| {
-        const entry = try Entry.parse(line);
-        try entries.append(entry);
-    }
-
-    var validEntryCount: u64 = 0;
-    for (entries.items) |entry| {
-        const pos1Matches = entry.password[entry.policy.positions[0]] == entry.policy.char;
-        const pos2Matches = entry.password[entry.policy.positions[1]] == entry.policy.char;
-        if ((pos1Matches and !pos2Matches) or (!pos1Matches and pos2Matches)) {
-            validEntryCount += 1;
+    var treesHit: u64 = 0;
+    var x: usize = 0;
+    var y: usize = 0;
+    while (!forrest.reachedEnd(y)) {
+        if (forrest.hasTree(x, y)) {
+            treesHit += 1;
         }
+
+        x += 3;
+        y += 1;
     }
 
-    return validEntryCount;
+    return treesHit;
 }
 
-const Entry = struct {
-    policy: Policy,
-    password: []const u8,
+const Forrest = struct {
+    trees: []bool,
+    width: usize,
+    height: usize,
 
-    pub fn parse(entry_str: []const u8) !Entry {
-        var parser = Parser{ .str = entry_str };
+    pub fn parse(str: []const u8, ally: mem.Allocator) !Forrest {
+        var trees = std.ArrayList(bool).init(ally);
+        var width: usize = 0;
+        for (0.., str) |i, char| {
+            if (char == '\n') {
+                if (width == 0) {
+                    width = i;
+                }
 
-        const pos1 = try parser.nextInt(usize);
-        try parser.expect('-');
-        const pos2 = try parser.nextInt(usize);
-        try parser.expect(' ');
-        const char = parser.next().?;
-        try parser.expect(':');
-        try parser.expect(' ');
-        const password = parser.remainder();
+                continue;
+            }
 
-        return Entry{
-            .policy = Policy{
-                .char = char,
-                // turn from 1 based to 0 based
-                .positions = .{ pos1 - 1, pos2 - 1 },
-            },
-            .password = password,
+            const tree = char == '#';
+            try trees.append(tree);
+        }
+
+        return Forrest{
+            .width = width,
+            .height = trees.items.len / width,
+            .trees = try trees.toOwnedSlice(),
         };
     }
-};
 
-const Policy = struct {
-    char: u8,
-    positions: [2]usize,
+    pub fn deinit(self: *Forrest, ally: mem.Allocator) void {
+        ally.free(self.trees);
+    }
+
+    pub fn hasTree(self: *Forrest, x: usize, y: usize) bool {
+        const looped_x = x % self.width;
+        return self.trees[looped_x + y * self.width];
+    }
+
+    pub fn reachedEnd(self: *Forrest, y: usize) bool {
+        return y >= self.height;
+    }
 };
