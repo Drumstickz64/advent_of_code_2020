@@ -28,19 +28,32 @@ fn solve(input: []const u8, ally: mem.Allocator) !u64 {
     var forrest = try Forrest.parse(input, ally);
     defer forrest.deinit(ally);
 
-    var treesHit: u64 = 0;
-    var x: usize = 0;
-    var y: usize = 0;
-    while (!forrest.reachedEnd(y)) {
-        if (forrest.hasTree(x, y)) {
-            treesHit += 1;
+    const paths = [5][2]usize{
+        .{ 1, 1 },
+        .{ 3, 1 },
+        .{ 5, 1 },
+        .{ 7, 1 },
+        .{ 1, 2 },
+    };
+
+    var result: u64 = 1;
+    for (paths) |path| {
+        var treesHit: u64 = 0;
+        var x: usize = 0;
+        var y: usize = 0;
+        while (!forrest.reachedEnd(y)) {
+            if (forrest.hasTree(x, y)) {
+                treesHit += 1;
+            }
+
+            x += path[0];
+            y += path[1];
         }
 
-        x += 3;
-        y += 1;
+        result *= treesHit;
     }
 
-    return treesHit;
+    return result;
 }
 
 const Forrest = struct {
