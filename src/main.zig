@@ -35,8 +35,9 @@ fn solve(input: []const u8) !u64 {
 
     var validEntryCount: u64 = 0;
     for (entries.items) |entry| {
-        const count = std.mem.count(u8, entry.password, &[_]u8{entry.policy.char});
-        if (entry.policy.min <= count and count <= entry.policy.max) {
+        const pos1Matches = entry.password[entry.policy.positions[0]] == entry.policy.char;
+        const pos2Matches = entry.password[entry.policy.positions[1]] == entry.policy.char;
+        if ((pos1Matches and !pos2Matches) or (!pos1Matches and pos2Matches)) {
             validEntryCount += 1;
         }
     }
@@ -51,9 +52,9 @@ const Entry = struct {
     pub fn parse(entry_str: []const u8) !Entry {
         var parser = Parser{ .str = entry_str };
 
-        const min = try parser.nextInt(u32);
+        const pos1 = try parser.nextInt(usize);
         try parser.expect('-');
-        const max = try parser.nextInt(u32);
+        const pos2 = try parser.nextInt(usize);
         try parser.expect(' ');
         const char = parser.next().?;
         try parser.expect(':');
@@ -62,9 +63,9 @@ const Entry = struct {
 
         return Entry{
             .policy = Policy{
-                .min = min,
-                .max = max,
                 .char = char,
+                // turn from 1 based to 0 based
+                .positions = .{ pos1 - 1, pos2 - 1 },
             },
             .password = password,
         };
@@ -73,8 +74,7 @@ const Entry = struct {
 
 const Policy = struct {
     char: u8,
-    min: u32,
-    max: u32,
+    positions: [2]usize,
 };
 
 const Parser = struct {
