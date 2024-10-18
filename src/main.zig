@@ -1,6 +1,10 @@
 const std = @import("std");
 const mem = std.mem;
 
+pub const std_options = .{
+    .log_level = .info,
+};
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const ally = gpa.allocator();
@@ -25,75 +29,144 @@ fn getInput(path: []const u8, ally: mem.Allocator) ![]u8 {
 }
 
 fn solve(input: []const u8, ally: mem.Allocator) !u64 {
-    var forrest = try Forrest.parse(input, ally);
-    defer forrest.deinit(ally);
+    _ = ally; // autofix
+    var validPasswordCount: u64 = 0;
 
-    const paths = [5][2]usize{
-        .{ 1, 1 },
-        .{ 3, 1 },
-        .{ 5, 1 },
-        .{ 7, 1 },
-        .{ 1, 2 },
-    };
+    var passports = mem.split(u8, input, "\n\n");
+    while (passports.next()) |passport| {
+        std.log.debug("passport = {s}\n", .{passport});
+        var creds = Creds{};
 
-    var result: u64 = 1;
-    for (paths) |path| {
-        var treesHit: u64 = 0;
-        var x: usize = 0;
-        var y: usize = 0;
-        while (!forrest.reachedEnd(y)) {
-            if (forrest.hasTree(x, y)) {
-                treesHit += 1;
+        var fields = mem.splitAny(u8, passport, "\n ");
+        while (fields.next()) |field| {
+            std.log.debug("field = {s}\n", .{field});
+
+            var it = mem.split(u8, field, ":");
+            const field_name = it.next().?;
+            const field_value = it.next().?;
+            std.log.debug("field: name = {s}, value = {s}\n", .{ field_name, field_value });
+
+            // zig fmt: off
+            if (mem.eql(u8, field_name, "byr") and Creds.isValidBirthYear(field_value)) creds.birth_year = true
+            else if (mem.eql(u8, field_name, "iyr") and Creds.isValidIssueYear(field_value)) creds.issue_year = true
+            else if (mem.eql(u8, field_name, "eyr") and Creds.isValidExpirationYear(field_value)) creds.expiration_year = true
+            else if (mem.eql(u8, field_name, "hgt") and Creds.isValidHeight(field_value)) creds.height = true
+            else if (mem.eql(u8, field_name, "hcl") and Creds.isValidHairColor(field_value)) creds.hair_color = true
+            else if (mem.eql(u8, field_name, "ecl") and Creds.isValidEyeColor(field_value)) creds.eye_color = true
+            else if (mem.eql(u8, field_name, "pid") and Creds.isValidPassportId(field_value)) creds.passport_id = true
+            else if (mem.eql(u8, field_name, "cid")) {}
+            else {
+                std.log.debug("invalid field: {s}", .{field});
+                break;
             }
-
-            x += path[0];
-            y += path[1];
+            // zig fmt: on
         }
 
-        result *= treesHit;
+        if (creds.allPresent()) {
+            validPasswordCount += 1;
+        }
     }
 
-    return result;
+    return validPasswordCount;
 }
 
-const Forrest = struct {
-    trees: []bool,
-    width: usize,
-    height: usize,
+const Creds = struct {
+    birth_year: bool = false,
+    issue_year: bool = false,
+    expiration_year: bool = false,
+    height: bool = false,
+    hair_color: bool = false,
+    eye_color: bool = false,
+    passport_id: bool = false,
 
-    pub fn parse(str: []const u8, ally: mem.Allocator) !Forrest {
-        var trees = std.ArrayList(bool).init(ally);
-        var width: usize = 0;
-        for (0.., str) |i, char| {
-            if (char == '\n') {
-                if (width == 0) {
-                    width = i;
-                }
-
-                continue;
+    pub fn allPresent(self: *const Creds) bool {
+        const fields = comptime blk: {
+            const info = @typeInfo(@TypeOf(self.*));
+            const fields = info.Struct.fields;
+            var names: [fields.len][]const u8 = undefined;
+            for (0.., fields) |i, field| {
+                names[i] = field.name;
             }
 
-            const tree = char == '#';
-            try trees.append(tree);
+            break :blk names;
+        };
+
+        inline for (fields) |field| {
+            if (!@field(self, field)) {
+                return false;
+            }
         }
 
-        return Forrest{
-            .width = width,
-            .height = trees.items.len / width,
-            .trees = try trees.toOwnedSlice(),
-        };
+        return true;
     }
 
-    pub fn deinit(self: *Forrest, ally: mem.Allocator) void {
-        ally.free(self.trees);
+    pub fn isValidBirthYear(value: []const u8) bool {
+        return Creds.isValidNumber(value, 4, 1920, 2002);
     }
 
-    pub fn hasTree(self: *Forrest, x: usize, y: usize) bool {
-        const looped_x = x % self.width;
-        return self.trees[looped_x + y * self.width];
+    pub fn isValidIssueYear(value: []const u8) bool {
+        return Creds.isValidNumber(value, 4, 2010, 2020);
     }
 
-    pub fn reachedEnd(self: *Forrest, y: usize) bool {
-        return y >= self.height;
+    pub fn isValidExpirationYear(value: []const u8) bool {
+        return Creds.isValidNumber(value, 4, 2020, 2030);
+    }
+
+    pub fn isValidHeight(value: []const u8) bool {
+        if (value.len < 3) {
+            return false;
+        }
+
+        if (std.mem.endsWith(u8, value, "in")) {
+            return Creds.isValidNumber(value[0 .. value.len - 2], 2, 59, 76);
+        }
+
+        if (std.mem.endsWith(u8, value, "cm")) {
+            return Creds.isValidNumber(value[0 .. value.len - 2], 3, 150, 193);
+        }
+
+        return false;
+    }
+
+    pub fn isValidHairColor(value: []const u8) bool {
+        if (value[0] != '#') {
+            return false;
+        }
+
+        _ = std.fmt.parseInt(u32, value[1..], 16) catch return false;
+        return true;
+    }
+
+    pub fn isValidEyeColor(value: []const u8) bool {
+        return (std.mem.eql(u8, value, "amb") or
+            std.mem.eql(u8, value, "blu") or
+            std.mem.eql(u8, value, "brn") or
+            std.mem.eql(u8, value, "gry") or
+            std.mem.eql(u8, value, "grn") or
+            std.mem.eql(u8, value, "hzl") or
+            std.mem.eql(u8, value, "oth"));
+    }
+
+    pub fn isValidPassportId(value: []const u8) bool {
+        if (value.len != 9) {
+            return false;
+        }
+
+        for (value) |char| {
+            if (!std.ascii.isDigit(char)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    fn isValidNumber(value: []const u8, char_count: usize, min_value: u32, max_value: u32) bool {
+        if (value.len != char_count) {
+            return false;
+        }
+
+        const num = std.fmt.parseInt(u32, value, 10) catch return false;
+        return min_value <= num and num <= max_value;
     }
 };
