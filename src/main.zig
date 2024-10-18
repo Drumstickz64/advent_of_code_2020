@@ -6,7 +6,7 @@ pub const std_options = .{
     .log_level = .info,
 };
 
-const TEST_ANSWER = 820;
+// const TEST_ANSWER = 820;
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -25,8 +25,8 @@ pub fn main() !void {
 
     const writer = std.io.getStdOut().writer();
     if (is_test) {
-        assert(answer == TEST_ANSWER, "answer is incorrect, expected '{d}', got '{d}'\n", .{ TEST_ANSWER, answer });
-        try writer.print("success\n", .{});
+        // assert(answer == TEST_ANSWER, "answer is incorrect, expected '{d}', got '{d}'\n", .{ TEST_ANSWER, answer });
+        try writer.print("answer = {d}, no way to test correctness\n", .{answer});
     } else {
         try writer.print("answer: {any}\n", .{answer});
     }
@@ -37,9 +37,7 @@ fn getInput(path: []const u8, ally: mem.Allocator) ![]u8 {
 }
 
 fn solve(input: []const u8, ally: mem.Allocator) !u64 {
-    _ = ally; // autofix
-
-    var maxId: u64 = 0;
+    var ids = std.ArrayList(u64).init(ally);
 
     var passes = std.mem.split(u8, input, "\n");
     while (passes.next()) |pass| {
@@ -71,10 +69,21 @@ fn solve(input: []const u8, ally: mem.Allocator) !u64 {
 
         const id = row * 8 + col;
 
-        if (id > maxId) {
-            maxId = id;
+        try ids.append(id);
+    }
+
+    std.mem.sort(
+        u64,
+        ids.items,
+        {},
+        comptime std.sort.asc(u64),
+    );
+
+    for (0..ids.items.len - 1) |i| {
+        if (ids.items[i + 1] - ids.items[i] > 1) {
+            return ids.items[i] + 1;
         }
     }
 
-    return maxId;
+    unreachable;
 }
